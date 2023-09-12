@@ -12,9 +12,7 @@ Kiota is a modern OpenAPI based client generator that supports multiple language
 
 ```yaml
 steps:
-  - name: Checkout
-    id: checkout
-    uses: actions/checkout@v3
+  - uses: actions/checkout@v3
 
   - uses: microsoft/setup-kiota@v0.5.0
 
