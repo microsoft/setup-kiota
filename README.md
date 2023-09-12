@@ -1,33 +1,75 @@
-# Project
+# Setup Kiota v0
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+[![GitHub Super-Linter](https://github.com/microsoft/setup-kiota/actions/workflows/linter.yml/badge.svg)](https://github.com/super-linter/super-linter)
+![CI](https://github.com/microsoft/setup-kiota/actions/workflows/ci.yml/badge.svg)
 
-As the maintainer of this project, please make a few updates:
+This actions sets up [kiota](https://aka.ms/kiota) so it can be used in your workflow. Kiota is a modern OpenAPI based client generator that supports multiple languages.
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+> NOTE: This action is currently in public preview and subject to change.
 
-## Contributing
+## Usage
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+```yaml
+steps:
+  - name: Checkout
+    id: checkout
+    uses: actions/checkout@v3
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+  - uses: microsoft/setup-kiota@v0.5.0
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+  - name: Update kiota clients in the repository
+    run: kiota update -o . # for a complete documentation of the CLI commands see https://aka.ms/kiota/docs
+    working-directory: src # assumes client is under the src path in your repository
+```
 
-## Trademarks
+## Parameters
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+The action also supports the following parameters
+
+### version
+
+Version of kiota to install.
+
+```yaml
+steps:
+  - uses: microsoft/setup-kiota@v0.5.0
+    with:
+      version: latest # (default) or a version like v1.5.1
+```
+
+### includePreRelease
+
+Whether or not to install a pre-release when available.
+
+```yaml
+steps:
+  - uses: microsoft/setup-kiota@v0.5.0
+    with:
+      includePreRelease: false # (default) or true to use a pre-release if one is available. MUST be false when the version set to anything other than 'latest'
+```
+
+## Outputs
+
+### path
+
+Full path to the installed kiota executable.
+
+```yaml
+steps:
+  - id: setup-kiota
+    uses: microsoft/setup-kiota@v0.5.0
+  - run: echo "${{ steps.setup-kiota.outputs.path }}"
+  # result: /tmp/kiotabin/v1.6.1/linux-x64/kiota
+```
+
+### version
+
+The version that was resolved during installation.
+
+```yaml
+steps:
+  - id: setup-kiota
+    uses: microsoft/setup-kiota@v0.5.0
+  - run: echo "${{ steps.setup-kiota.outputs.version }}"
+  # result: v1.6.1 or v1.6.0-preview.202309070001
+```

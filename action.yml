@@ -1,0 +1,25 @@
+name: 'Setup kiota'
+description: 'Installs Kiota OpenAPI client generator so it can be used in your workflow.'
+author: 'Microsoft'
+
+# Define your inputs here.
+inputs:
+  version:
+    description: 'The version of kiota you want to use. Must match one of the GitHub tags e.g. v.1.6.1.'
+    required: true
+    default: 'latest'
+  includePreRelease:
+    description: 'Whether to include pre-release versions of kiota. Only use with the latest version.'
+    required: false
+    default: 'false'
+
+# Define your outputs here.
+outputs:
+  path:
+    description: 'The path to the kiota executable.'
+  version:
+    description: 'The version of kiota that was installed.'
+
+runs:
+  using: node20
+  main: dist/index.js
