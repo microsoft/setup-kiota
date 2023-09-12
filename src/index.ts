@@ -71,7 +71,7 @@ function unzipFile(zipFilePath: string, destinationPath: string): void {
   zip.extractAllTo(destinationPath, true)
 }
 
-function downloadFileFromUrl(
+async function downloadFileFromUrl(
   url: string,
   destinationPath: string
 ): Promise<void> {
@@ -114,7 +114,7 @@ function getCurrentPlatform(): string {
 }
 
 async function getKiotaVersion(
-  includePreRelease: boolean = false
+  includePreRelease = false
 ): Promise<string> {
   const response = await fetch(
     'https://api.github.com/repos/microsoft/kiota/releases',
@@ -154,7 +154,7 @@ interface Release {
 export async function run(): Promise<void> {
   try {
     let version: string = core.getInput('version')
-    let includePreReleaseRaw = core.getInput('includePreRelease')
+    const includePreReleaseRaw: string = core.getInput('includePreRelease')
     let includePreRelease = false
     if (includePreReleaseRaw) {
       includePreRelease = includePreReleaseRaw.toLowerCase() === 'true'

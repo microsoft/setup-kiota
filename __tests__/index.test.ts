@@ -20,10 +20,10 @@ const exportVariableMock = jest.spyOn(core, 'exportVariable')
 // Mock the action's entrypoint
 const runMock = jest.spyOn(index, 'run')
 
-global.fetch = jest.fn(() =>
+global.fetch = jest.fn(async () =>
   Promise.resolve({
     ok: true,
-    json: () =>
+    json: async () =>
       Promise.resolve([
         {
           url: 'https://api.github.com/repos/microsoft/kiota/releases/120642190',
@@ -36,7 +36,7 @@ global.fetch = jest.fn(() =>
         }
       ])
   })
-) as any
+) as unknown as typeof global.fetch
 
 describe('action', () => {
   beforeEach(() => {
