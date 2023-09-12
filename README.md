@@ -46,7 +46,9 @@ Whether or not to install a prerelease when available.
 steps:
   - uses: microsoft/setup-kiota@v0.5.0
     with:
-      includePreRelease: false # (default) or true to use a prerelease if one is available. MUST be false when the version set to anything other than 'latest'
+      includePreRelease: false 
+      # (default) or true to use a prerelease if one is available.
+      # MUST be false when the version set to anything other than 'latest'
 ```
 
 ## Outputs
