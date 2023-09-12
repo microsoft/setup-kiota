@@ -5749,8 +5749,8 @@ function getKiotaPath(kiotaVersion, withFileName = true) {
     }
     return kiotaPath;
 }
-function makeExecutable(path) {
-    fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(path, 0o755);
+function makeExecutable(targetPath) {
+    fs__WEBPACK_IMPORTED_MODULE_3__.chmodSync(targetPath, 0o755);
 }
 const binariesRootDirectory = 'kiotabin';
 function getKiotaPathInternal(kiotaVersion, withFileName = true) {
@@ -5767,7 +5767,7 @@ function unzipFile(zipFilePath, destinationPath) {
     zip.extractAllTo(destinationPath, true);
 }
 function downloadFileFromUrl(url, destinationPath) {
-    return new Promise((resolve, reject) => {
+    return new Promise(resolve => {
         https__WEBPACK_IMPORTED_MODULE_2__.get(url, response => {
             if (response.statusCode &&
                 response.statusCode >= 300 &&

@@ -5,7 +5,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
 
-async function ensureKiotaIsPresent(kiotaVersion: string) {
+async function ensureKiotaIsPresent(kiotaVersion: string): Promise<void> {
   const currentPlatform = getCurrentPlatform()
   const installPath = getKiotaPathInternal(kiotaVersion, false)
   if (installPath) {
@@ -43,8 +43,8 @@ function getKiotaPath(kiotaVersion: string, withFileName = true): string {
   }
   return kiotaPath
 }
-function makeExecutable(path: string) {
-  fs.chmodSync(path, 0o755)
+function makeExecutable(targetPath: string): void {
+  fs.chmodSync(targetPath, 0o755)
 }
 
 const binariesRootDirectory = 'kiotabin'
@@ -66,13 +66,16 @@ function getKiotaPathInternal(
   return directoryPath
 }
 
-function unzipFile(zipFilePath: string, destinationPath: string) {
+function unzipFile(zipFilePath: string, destinationPath: string): void {
   const zip = new AdmZip(zipFilePath)
   zip.extractAllTo(destinationPath, true)
 }
 
-function downloadFileFromUrl(url: string, destinationPath: string) {
-  return new Promise((resolve, reject) => {
+function downloadFileFromUrl(
+  url: string,
+  destinationPath: string
+): Promise<void> {
+  return new Promise(resolve => {
     https.get(url, response => {
       if (
         response.statusCode &&
