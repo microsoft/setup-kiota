@@ -10,6 +10,7 @@ import * as core from '@actions/core'
 import * as index from '../src/index'
 
 // Mock the GitHub Actions core library
+jest.mock('@actions/core')
 const debugMock = jest.spyOn(core, 'debug')
 const getInputMock = jest.spyOn(core, 'getInput')
 const addPathMock = jest.spyOn(core, 'addPath')
