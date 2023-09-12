@@ -113,9 +113,7 @@ function getCurrentPlatform(): string {
   return `${binPathSegmentOS}-${process.arch}`
 }
 
-async function getKiotaVersion(
-  includePreRelease = false
-): Promise<string> {
+async function getKiotaVersion(includePreRelease = false): Promise<string> {
   const response = await fetch(
     'https://api.github.com/repos/microsoft/kiota/releases',
     {

@@ -5766,7 +5766,7 @@ function unzipFile(zipFilePath, destinationPath) {
     const zip = new (adm_zip__WEBPACK_IMPORTED_MODULE_5___default())(zipFilePath);
     zip.extractAllTo(destinationPath, true);
 }
-function downloadFileFromUrl(url, destinationPath) {
+async function downloadFileFromUrl(url, destinationPath) {
     return new Promise(resolve => {
         https__WEBPACK_IMPORTED_MODULE_2__.get(url, response => {
             if (response.statusCode &&
@@ -5828,7 +5828,7 @@ async function getKiotaVersion(includePreRelease = false) {
 async function run() {
     try {
         let version = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('version');
-        let includePreReleaseRaw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('includePreRelease');
+        const includePreReleaseRaw = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('includePreRelease');
         let includePreRelease = false;
         if (includePreReleaseRaw) {
             includePreRelease = includePreReleaseRaw.toLowerCase() === 'true';
