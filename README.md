@@ -3,7 +3,8 @@
 [![GitHub Super-Linter](https://github.com/microsoft/setup-kiota/actions/workflows/linter.yml/badge.svg)](https://github.com/super-linter/super-linter)
 ![CI](https://github.com/microsoft/setup-kiota/actions/workflows/ci.yml/badge.svg)
 
-This actions sets up [kiota](https://aka.ms/kiota) so it can be used in your workflow. Kiota is a modern OpenAPI based client generator that supports multiple languages.
+This actions sets up [kiota](https://aka.ms/kiota) so it can be used in your workflow.
+Kiota is a modern OpenAPI based client generator that supports multiple languages.
 
 > NOTE: This action is currently in public preview and subject to change.
 
@@ -62,6 +63,7 @@ steps:
   # result: /tmp/kiotabin/v1.6.1/linux-x64/kiota
 ```
 
+<!-- markdownlint-disable-next-line no-duplicate-header -->
 ### version
 
 The version that was resolved during installation.
