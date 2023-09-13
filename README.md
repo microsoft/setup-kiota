@@ -3,7 +3,8 @@
 [![GitHub Super-Linter](https://github.com/microsoft/setup-kiota/actions/workflows/linter.yml/badge.svg)](https://github.com/super-linter/super-linter)
 ![CI](https://github.com/microsoft/setup-kiota/actions/workflows/ci.yml/badge.svg)
 
-This actions sets up [kiota](https://aka.ms/kiota) so it can be used in your workflow. Kiota is a modern OpenAPI based client generator that supports multiple languages.
+This actions sets up [kiota](https://aka.ms/kiota) so it can be used in your workflow.
+Kiota is a modern OpenAPI based client generator that supports multiple languages.
 
 > NOTE: This action is currently in public preview and subject to change.
 
@@ -11,9 +12,7 @@ This actions sets up [kiota](https://aka.ms/kiota) so it can be used in your wor
 
 ```yaml
 steps:
-  - name: Checkout
-    id: checkout
-    uses: actions/checkout@v3
+  - uses: actions/checkout@v3
 
   - uses: microsoft/setup-kiota@v0.5.0
 
@@ -39,13 +38,15 @@ steps:
 
 ### includePreRelease
 
-Whether or not to install a pre-release when available.
+Whether or not to install a prerelease when available.
 
 ```yaml
 steps:
   - uses: microsoft/setup-kiota@v0.5.0
     with:
-      includePreRelease: false # (default) or true to use a pre-release if one is available. MUST be false when the version set to anything other than 'latest'
+      includePreRelease: false 
+      # (default) or true to use a prerelease if one is available.
+      # MUST be false when the version set to anything other than 'latest'
 ```
 
 ## Outputs
@@ -62,6 +63,7 @@ steps:
   # result: /tmp/kiotabin/v1.6.1/linux-x64/kiota
 ```
 
+<!-- markdownlint-disable-next-line no-duplicate-header -->
 ### version
 
 The version that was resolved during installation.
