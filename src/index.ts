@@ -108,8 +108,8 @@ function getCurrentPlatform(): string {
     process.platform === 'win32'
       ? windowsPlatform
       : process.platform === 'darwin'
-      ? osxPlatform
-      : linuxPlatform
+        ? osxPlatform
+        : linuxPlatform
   return `${binPathSegmentOS}-${process.arch}`
 }
 
