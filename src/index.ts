@@ -104,13 +104,14 @@ const windowsPlatform = 'win'
 const osxPlatform = 'osx'
 const linuxPlatform = 'linux'
 function getCurrentPlatform(): string {
-  const binPathSegmentOS =
-    process.platform === 'win32'
-      ? windowsPlatform
-      : process.platform === 'darwin'
-        ? osxPlatform
-        : linuxPlatform
-  return `${binPathSegmentOS}-${process.arch}`
+  switch (process.platform) {
+    case 'win32':
+      return `${windowsPlatform}-${process.arch}`
+    case 'darwin':
+      return `${osxPlatform}-${process.arch}`
+    default:
+      return `${linuxPlatform}-${process.arch}`
+  }
 }
 
 async function getKiotaVersion(includePreRelease = false): Promise<string> {
