@@ -15,3 +15,7 @@ updates:
       - npm
     schedule:
       interval: daily
+    groups:
+      eslint:
+        patterns:
+          - "*eslint*"
