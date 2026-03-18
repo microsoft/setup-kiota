@@ -10,6 +10,7 @@ on:
   pull_request:
     types: [synchronize]
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   pull-requests: write
