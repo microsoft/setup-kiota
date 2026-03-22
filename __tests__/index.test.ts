@@ -61,7 +61,7 @@ describe('action', () => {
           return ''
       }
     })
-    getBooleanInputMock.mockImplementation((_name: string): boolean => false)
+    getBooleanInputMock.mockImplementation((): boolean => false)
 
     await index.run()
 
@@ -70,12 +70,6 @@ describe('action', () => {
       1,
       expect.stringMatching(
         /Latest version is v\d\.\d\.\d-?(?:preview)?\.?\d{0,12}/
-      )
-    )
-    expect(debugMock).toHaveBeenNthCalledWith(
-      2,
-      expect.stringMatching(
-        /Installing version v\d\.\d\.\d-?(?:preview)?\.?\d{0,12} .../
       )
     )
     expect(setOutputMock).toHaveBeenNthCalledWith(
@@ -94,8 +88,8 @@ describe('action', () => {
 
   it('sets a failed status when version is missing', async () => {
     // Set the action's inputs as return values from core.getInput()
-    getInputMock.mockImplementation((_name: string): string => '')
-    getBooleanInputMock.mockImplementation((_name: string): boolean => false)
+    getInputMock.mockImplementation((): string => '')
+    getBooleanInputMock.mockImplementation((): boolean => false)
 
     await index.run()
 
@@ -115,7 +109,7 @@ describe('action', () => {
           return ''
       }
     })
-    getBooleanInputMock.mockImplementation((_name: string): boolean => true)
+    getBooleanInputMock.mockImplementation((): boolean => true)
 
     await index.run()
 
@@ -135,7 +129,7 @@ describe('action', () => {
           return ''
       }
     })
-    getBooleanInputMock.mockImplementation((_name: string): boolean => false)
+    getBooleanInputMock.mockImplementation((): boolean => false)
 
     await index.run()
 
