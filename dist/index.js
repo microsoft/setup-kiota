@@ -33903,11 +33903,7 @@ async function getKiotaVersion(includePreRelease = false) {
 async function run() {
     try {
         let version = getInput('version');
-        const includePreReleaseRaw = getInput('includePreRelease');
-        let includePreRelease = false;
-        if (includePreReleaseRaw) {
-            includePreRelease = includePreReleaseRaw.toLowerCase() === 'true';
-        }
+        const includePreRelease = getBooleanInput('includePreRelease');
         if (!version) {
             throw new Error('Version input is required');
         }

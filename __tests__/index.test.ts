@@ -6,20 +6,27 @@
  * variables following the pattern `INPUT_<INPUT_NAME>`.
  */
 
-import * as core from '@actions/core'
-import * as index from '../src/index'
+import { jest } from '@jest/globals'
 
-// Mock the GitHub Actions core library
-jest.mock('@actions/core')
-const debugMock = jest.spyOn(core, 'debug')
-const getInputMock = jest.spyOn(core, 'getInput')
-const addPathMock = jest.spyOn(core, 'addPath')
-const setFailedMock = jest.spyOn(core, 'setFailed')
-const setOutputMock = jest.spyOn(core, 'setOutput')
-const exportVariableMock = jest.spyOn(core, 'exportVariable')
+const debugMock = jest.fn<() => void>()
+const getInputMock = jest.fn<(name: string) => string>()
+const getBooleanInputMock = jest.fn<(name: string) => boolean>()
+const addPathMock = jest.fn<() => void>()
+const setFailedMock = jest.fn<(message: string | Error) => void>()
+const setOutputMock = jest.fn<(name: string, value: unknown) => void>()
+const exportVariableMock = jest.fn<(name: string, val: unknown) => void>()
 
-// Mock the action's entrypoint
-const runMock = jest.spyOn(index, 'run')
+jest.unstable_mockModule('@actions/core', () => ({
+  debug: debugMock,
+  getInput: getInputMock,
+  getBooleanInput: getBooleanInputMock,
+  addPath: addPathMock,
+  setFailed: setFailedMock,
+  setOutput: setOutputMock,
+  exportVariable: exportVariableMock
+}))
+
+const index = await import('../src/index')
 
 global.fetch = jest.fn(async () =>
   Promise.resolve({
@@ -50,15 +57,13 @@ describe('action', () => {
       switch (name) {
         case 'version':
           return 'latest'
-        case 'includePreRelease':
-          return 'false'
         default:
           return ''
       }
     })
+    getBooleanInputMock.mockImplementation((_name: string): boolean => false)
 
     await index.run()
-    expect(runMock).toHaveReturned()
 
     // Verify that all of the core library functions were called correctly
     expect(debugMock).toHaveBeenNthCalledWith(
@@ -89,17 +94,10 @@ describe('action', () => {
 
   it('sets a failed status when version is missing', async () => {
     // Set the action's inputs as return values from core.getInput()
-    getInputMock.mockImplementation((name: string): string => {
-      switch (name) {
-        case 'milliseconds':
-          return 'this is not a number'
-        default:
-          return ''
-      }
-    })
+    getInputMock.mockImplementation((_name: string): string => '')
+    getBooleanInputMock.mockImplementation((_name: string): boolean => false)
 
     await index.run()
-    expect(runMock).toHaveReturned()
 
     // Verify that all of the core library functions were called correctly
     expect(setFailedMock).toHaveBeenNthCalledWith(
@@ -113,15 +111,13 @@ describe('action', () => {
       switch (name) {
         case 'version':
           return 'v1.5.1'
-        case 'includePreRelease':
-          return 'true'
         default:
           return ''
       }
     })
+    getBooleanInputMock.mockImplementation((_name: string): boolean => true)
 
     await index.run()
-    expect(runMock).toHaveReturned()
 
     // Verify that all of the core library functions were called correctly
     expect(setFailedMock).toHaveBeenNthCalledWith(
@@ -139,9 +135,9 @@ describe('action', () => {
           return ''
       }
     })
+    getBooleanInputMock.mockImplementation((_name: string): boolean => false)
 
     await index.run()
-    expect(runMock).toHaveReturned()
 
     // Verify that all of the core library functions were called correctly
     expect(setOutputMock).toHaveBeenNthCalledWith(1, 'version', 'v1.5.1')
