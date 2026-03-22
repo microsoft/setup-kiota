@@ -153,11 +153,7 @@ interface Release {
 export async function run(): Promise<void> {
   try {
     let version: string = core.getInput('version')
-    const includePreReleaseRaw: string = core.getInput('includePreRelease')
-    let includePreRelease = false
-    if (includePreReleaseRaw) {
-      includePreRelease = includePreReleaseRaw.toLowerCase() === 'true'
-    }
+    const includePreRelease: boolean = core.getBooleanInput('includePreRelease')
     if (!version) {
       throw new Error('Version input is required')
     }
