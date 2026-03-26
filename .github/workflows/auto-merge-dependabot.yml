@@ -3,6 +3,7 @@ name: Auto-merge dependabot updates
 on:
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   pull-requests: write
