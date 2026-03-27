@@ -26,7 +26,7 @@ async function ensureKiotaIsPresent(kiotaVersion: string): Promise<void> {
         ) {
           makeExecutable(kiotaPath)
         }
-      } catch (error) {
+      } catch {
         fs.rmdirSync(installPath, { recursive: true })
         throw new Error(
           'Kiota download failed. Check the extension host logs for more information.'
@@ -190,5 +190,4 @@ export async function run(): Promise<void> {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
 run()
