@@ -34241,7 +34241,7 @@ async function ensureKiotaIsPresent(kiotaVersion) {
                     makeExecutable(kiotaPath);
                 }
             }
-            catch (error) {
+            catch {
                 external_fs_.rmdirSync(installPath, { recursive: true });
                 throw new Error('Kiota download failed. Check the extension host logs for more information.');
             }
@@ -34371,7 +34371,6 @@ async function run() {
             setFailed(error.message);
     }
 }
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
 run();
 
 var __webpack_exports__run = __webpack_exports__.e;
