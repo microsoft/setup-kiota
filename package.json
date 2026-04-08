@@ -80,12 +80,12 @@
     "adm-zip": "^0.5.17"
   },
   "devDependencies": {
-    "@eslint/compat": "^2.0.4",
+    "@eslint/compat": "^2.0.5",
     "@types/adm-zip": "^0.5.8",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.12.2",
-    "@typescript-eslint/eslint-plugin": "^8.57.2",
-    "@typescript-eslint/parser": "^8.57.2",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
     "@vercel/ncc": "^0.38.4",
     "eslint": "^10.2.0",
     "eslint-plugin-github": "^6.0.0",
