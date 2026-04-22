@@ -76,7 +76,7 @@
     ]
   },
   "dependencies": {
-    "@actions/core": "^3.0.0",
+    "@actions/core": "^3.0.1",
     "adm-zip": "^0.5.17"
   },
   "devDependencies": {
