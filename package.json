@@ -80,7 +80,7 @@
     "adm-zip": "^0.5.17"
   },
   "devDependencies": {
-    "@eslint/compat": "^2.0.5",
+    "@eslint/compat": "^2.1.0",
     "@types/adm-zip": "^0.5.8",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.12.3",
