@@ -207,6 +207,7 @@ module.exports = function (/**String*/ input, /** object */ options) {
          * Remove the entry from the file or the entry and all it's nested directories and files if the given entry is a directory
          *
          * @param {ZipEntry|string} entry
+         * @param {boolean} withsubfolders
          * @returns {void}
          */
         deleteFile: function (entry, withsubfolders = true) {
@@ -491,7 +492,7 @@ module.exports = function (/**String*/ input, /** object */ options) {
         addLocalFolderAsync2: function (options, callback) {
             const self = this;
             options = typeof options === "object" ? options : { localPath: options };
-            localPath = pth.resolve(fixPath(options.localPath));
+            const localPath = pth.resolve(fixPath(options.localPath));
             let { zipPath, filter, namefix } = options;
 
             if (filter instanceof RegExp) {
@@ -510,7 +511,7 @@ module.exports = function (/**String*/ input, /** object */ options) {
             zipPath = zipPath ? fixPath(zipPath) : "";
 
             // Check Namefix function
-            if (namefix == "latin1") {
+            if (namefix === "latin1") {
                 namefix = (str) =>
                     str
                         .normalize("NFD")
@@ -686,7 +687,7 @@ module.exports = function (/**String*/ input, /** object */ options) {
 
             var entryName = canonical(item.entryName);
 
-            var target = sanitize(targetPath, outFileName && !item.isDirectory ? outFileName : maintainEntryPath ? entryName : pth.basename(entryName));
+            var target = sanitize(targetPath, outFileName && !item.isDirectory ? canonical(outFileName) : maintainEntryPath ? entryName : pth.basename(entryName));
 
             if (item.isDirectory) {
                 var children = _zip.getEntryChildren(item);
@@ -727,7 +728,7 @@ module.exports = function (/**String*/ input, /** object */ options) {
                 return false;
             }
 
-            for (var entry in _zip.entries) {
+            for (var entry of _zip.entries) {
                 try {
                     if (entry.isDirectory) {
                         continue;
@@ -1049,6 +1050,7 @@ module.exports = function () {
             switch (val) {
                 case Constants.STORED:
                     this.version = 10;
+                    break;
                 case Constants.DEFLATED:
                 default:
                     this.version = 20;
@@ -1251,7 +1253,11 @@ module.exports = function () {
             // version needed to extract
             data.writeUInt16LE(_version, Constants.LOCVER);
             // general purpose bit flag
-            data.writeUInt16LE(_flags, Constants.LOCFLG);
+            // clear bit 3 (data descriptor): we always write the real crc-32
+            // and sizes into this local header, so no trailing descriptor is
+            // emitted. Leaving the flag set would make the output unreadable
+            // (see issue #555).
+            data.writeUInt16LE(_flags & ~Constants.FLG_DESC, Constants.LOCFLG);
             // compression method
             data.writeUInt16LE(_method, Constants.LOCHOW);
             // modification time (2 bytes time, 2 bytes date)
@@ -1279,7 +1285,9 @@ module.exports = function () {
             // version needed to extract
             data.writeUInt16LE(_version, Constants.CENVER);
             // encrypt, decrypt flags
-            data.writeUInt16LE(_flags, Constants.CENFLG);
+            // clear bit 3 (data descriptor) to match the local header we emit
+            // (real crc/sizes are written, no descriptor follows the data) — issue #555
+            data.writeUInt16LE(_flags & ~Constants.FLG_DESC, Constants.CENFLG);
             // compression method
             data.writeUInt16LE(_method, Constants.CENHOW);
             // modification time (2 bytes time, 2 bytes date)
@@ -1364,6 +1372,8 @@ module.exports = function () {
         _offset = 0,
         _commentLength = 0;
 
+    const needsZip64 = () => _volumeEntries > Constants.EF_ZIP64_OR_16 || _totalEntries > Constants.EF_ZIP64_OR_16 || _size > Constants.EF_ZIP64_OR_32 || _offset > Constants.EF_ZIP64_OR_32;
+
     return {
         get diskEntries() {
             return _volumeEntries;
@@ -1401,7 +1411,7 @@ module.exports = function () {
         },
 
         get mainHeaderSize() {
-            return Constants.ENDHDR + _commentLength;
+            return (needsZip64() ? Constants.ZIP64HDR + Constants.END64HDR : 0) + Constants.ENDHDR + _commentLength;
         },
 
         loadFromBinary: function (/*Buffer*/ data) {
@@ -1431,7 +1441,7 @@ module.exports = function () {
                 // total number of entries
                 _totalEntries = Utils.readBigUInt64LE(data, Constants.ZIP64TOT);
                 // central directory size in bytes
-                _size = Utils.readBigUInt64LE(data, Constants.ZIP64SIZE);
+                _size = Utils.readBigUInt64LE(data, Constants.ZIP64SIZB);
                 // offset of first CEN header
                 _offset = Utils.readBigUInt64LE(data, Constants.ZIP64OFF);
 
@@ -1440,22 +1450,67 @@ module.exports = function () {
         },
 
         toBinary: function () {
-            var b = Buffer.alloc(Constants.ENDHDR + _commentLength);
+            if (!needsZip64()) {
+                var b = Buffer.alloc(Constants.ENDHDR + _commentLength);
+                // "PK 05 06" signature
+                b.writeUInt32LE(Constants.ENDSIG, 0);
+                b.writeUInt32LE(0, 4);
+                // number of entries on this volume
+                b.writeUInt16LE(_volumeEntries, Constants.ENDSUB);
+                // total number of entries
+                b.writeUInt16LE(_totalEntries, Constants.ENDTOT);
+                // central directory size in bytes
+                b.writeUInt32LE(_size, Constants.ENDSIZ);
+                // offset of first CEN header
+                b.writeUInt32LE(_offset, Constants.ENDOFF);
+                // zip file comment length
+                b.writeUInt16LE(_commentLength, Constants.ENDCOM);
+                // fill comment memory with spaces so no garbage is left there
+                b.fill(" ", Constants.ENDHDR);
+
+                return b;
+            }
+
+            var b = Buffer.alloc(this.mainHeaderSize);
+            let offset = 0;
+
+            // Zip64 end of central directory record.
+            b.writeUInt32LE(Constants.ZIP64SIG, offset);
+            Utils.writeBigUInt64LE(b, Constants.ZIP64HDR - Constants.ZIP64LEAD, offset + Constants.ZIP64SIZE);
+            b.writeUInt16LE(45, offset + Constants.ZIP64VEM);
+            b.writeUInt16LE(45, offset + Constants.ZIP64VER);
+            b.writeUInt32LE(0, offset + Constants.ZIP64DSK);
+            b.writeUInt32LE(0, offset + Constants.ZIP64DSKDIR);
+            Utils.writeBigUInt64LE(b, _volumeEntries, offset + Constants.ZIP64SUB);
+            Utils.writeBigUInt64LE(b, _totalEntries, offset + Constants.ZIP64TOT);
+            Utils.writeBigUInt64LE(b, _size, offset + Constants.ZIP64SIZB);
+            Utils.writeBigUInt64LE(b, _offset, offset + Constants.ZIP64OFF);
+
+            const zip64EndOffset = _offset + _size;
+            offset += Constants.ZIP64HDR;
+
+            // Zip64 end of central directory locator.
+            b.writeUInt32LE(Constants.END64SIG, offset);
+            b.writeUInt32LE(0, offset + Constants.END64START);
+            Utils.writeBigUInt64LE(b, zip64EndOffset, offset + Constants.END64OFF);
+            b.writeUInt32LE(1, offset + Constants.END64NUMDISKS);
+            offset += Constants.END64HDR;
+
             // "PK 05 06" signature
-            b.writeUInt32LE(Constants.ENDSIG, 0);
-            b.writeUInt32LE(0, 4);
+            b.writeUInt32LE(Constants.ENDSIG, offset);
+            b.writeUInt32LE(0, offset + 4);
             // number of entries on this volume
-            b.writeUInt16LE(_volumeEntries, Constants.ENDSUB);
+            b.writeUInt16LE(Math.min(_volumeEntries, Constants.EF_ZIP64_OR_16), offset + Constants.ENDSUB);
             // total number of entries
-            b.writeUInt16LE(_totalEntries, Constants.ENDTOT);
+            b.writeUInt16LE(Math.min(_totalEntries, Constants.EF_ZIP64_OR_16), offset + Constants.ENDTOT);
             // central directory size in bytes
-            b.writeUInt32LE(_size, Constants.ENDSIZ);
+            b.writeUInt32LE(Math.min(_size, Constants.EF_ZIP64_OR_32), offset + Constants.ENDSIZ);
             // offset of first CEN header
-            b.writeUInt32LE(_offset, Constants.ENDOFF);
+            b.writeUInt32LE(Math.min(_offset, Constants.EF_ZIP64_OR_32), offset + Constants.ENDOFF);
             // zip file comment length
-            b.writeUInt16LE(_commentLength, Constants.ENDCOM);
+            b.writeUInt16LE(_commentLength, offset + Constants.ENDCOM);
             // fill comment memory with spaces so no garbage is left there
-            b.fill(" ", Constants.ENDHDR);
+            b.fill(" ", offset + Constants.ENDHDR);
 
             return b;
         },
@@ -1540,7 +1595,7 @@ exports.ZipCrypto = __nccwpck_require__(2689);
 /***/ 9540:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-const version = +(process.versions ? process.versions.node : "").split(".")[0] || 0;
+const version = +(process?.versions?.node ?? "").split(".")[0] || 0;
 
 module.exports = function (/*Buffer*/ inbuf, /*number*/ expectedLength) {
     var zlib = __nccwpck_require__(3106);
@@ -2381,13 +2436,13 @@ Utils.findLast = function (arr, callback) {
     return void 0;
 };
 
-// make abolute paths taking prefix as root folder
+// make absolute paths taking prefix as root folder
 Utils.sanitize = function (/*string*/ prefix, /*string*/ name) {
     prefix = pth.resolve(pth.normalize(prefix));
     var parts = name.split("/");
     for (var i = 0, l = parts.length; i < l; i++) {
         var path = pth.normalize(pth.join(prefix, parts.slice(i, l).join(pth.sep)));
-        if (path.indexOf(prefix) === 0) {
+        if (path === prefix || path.startsWith(prefix + pth.sep)) {
             return path;
         }
     }
@@ -2410,6 +2465,13 @@ Utils.readBigUInt64LE = function (/*Buffer*/ buffer, /*int*/ index) {
     const lo = buffer.readUInt32LE(index);
     const hi = buffer.readUInt32LE(index + 4);
     return hi * 0x100000000 + lo;
+};
+
+Utils.writeBigUInt64LE = function (/*Buffer*/ buffer, /*Number*/ value, /*int*/ index) {
+    const lo = value >>> 0;
+    const hi = Math.floor(value / 0x100000000) >>> 0;
+    buffer.writeUInt32LE(lo, index);
+    buffer.writeUInt32LE(hi, index + 4);
 };
 
 Utils.fromDOS2Date = function (val) {
@@ -3192,7 +3254,7 @@ module.exports = function (/*Buffer|null*/ inBuffer, /** object */ options) {
             // write main header
             const mh = mainHeader.toBinary();
             if (_comment) {
-                _comment.copy(mh, Utils.Constants.ENDHDR); // add zip file comment
+                _comment.copy(mh, mh.length - _comment.length); // add zip file comment
             }
             mh.copy(outBuffer, dindex);
 
@@ -3270,7 +3332,7 @@ module.exports = function (/*Buffer|null*/ inBuffer, /** object */ options) {
 
                         const mh = mainHeader.toBinary();
                         if (_comment) {
-                            _comment.copy(mh, Utils.Constants.ENDHDR); // add zip file comment
+                            _comment.copy(mh, mh.length - _comment.length); // add zip file comment
                         }
 
                         mh.copy(outBuffer, dindex); // write main header
