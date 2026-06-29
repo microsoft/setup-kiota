@@ -77,7 +77,7 @@
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "adm-zip": "^0.5.17"
+    "adm-zip": "^0.5.18"
   },
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
