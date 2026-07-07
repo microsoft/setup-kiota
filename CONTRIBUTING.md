@@ -6,7 +6,7 @@ Thanks for your interest in contributing to Kiota! We welcome contributions from
 
 To get started, you'll need to have the following tools installed:
 
-- [NodeJS v20 or above](https://nodejs.org/en/download/)
+- [NodeJS v24 or above](https://nodejs.org/en/download/)
 
 ## Recommended tools
 
