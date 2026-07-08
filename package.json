@@ -83,7 +83,7 @@
     "@eslint/compat": "^2.1.0",
     "@types/adm-zip": "^0.5.8",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.13.2",
+    "@types/node": "^24.13.3",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
     "@vercel/ncc": "^0.44.1",
