@@ -53,6 +53,18 @@ module.exports = function (/**String*/ input, /** object */ options) {
     // instanciate utils filesystem
     const filetools = new Utils(opts);
 
+    // Restore the archived permissions on extracted directories. This has to run
+    // after a directory's contents are written: applying a restrictive mode
+    // (e.g. 0o500) up front would stop us writing the files it contains. Applying
+    // the deepest paths first keeps parent directories traversable while their
+    // children are updated (issue #530).
+    const applyDirAttributes = (dirEntries) => {
+        dirEntries
+            .filter((d) => d.attr)
+            .sort((a, b) => b.path.length - a.path.length)
+            .forEach((d) => filetools.fs.chmodSync(d.path, d.attr));
+    };
+
     if (typeof opts.decoder !== "object" || typeof opts.decoder.encode !== "function" || typeof opts.decoder.decode !== "function") {
         opts.decoder = Utils.decoder;
     }
@@ -697,8 +709,12 @@ module.exports = function (/**String*/ input, /** object */ options) {
                     if (!content) {
                         throw Utils.Errors.CANT_EXTRACT_FILE();
                     }
-                    var name = canonical(child.entryName);
-                    var childName = sanitize(targetPath, maintainEntryPath ? name : pth.basename(name));
+                    // When not maintaining the full entry path, keep each child's path
+                    // relative to the extracted directory (drop the directory's own
+                    // prefix) instead of flattening every file to its basename, which
+                    // collapsed subdirectories together (issue #306).
+                    var name = canonical(maintainEntryPath ? child.entryName : child.entryName.substring(item.entryName.length));
+                    var childName = sanitize(targetPath, name);
                     // The reverse operation for attr depend on method addFile()
                     const fileAttr = keepOriginalPermission ? child.header.fileAttr : undefined;
                     filetools.writeFileTo(childName, content, overwrite, fileAttr);
@@ -733,7 +749,9 @@ module.exports = function (/**String*/ input, /** object */ options) {
                     if (entry.isDirectory) {
                         continue;
                     }
-                    var content = _zip.entries[entry].getData(pass);
+                    // was `_zip.entries[entry]` (indexing the array with an entry
+                    // object -> undefined -> threw -> test() always returned false)
+                    var content = entry.getData(pass);
                     if (!content) {
                         return false;
                     }
@@ -760,10 +778,13 @@ module.exports = function (/**String*/ input, /** object */ options) {
             overwrite = get_Bool(false, overwrite);
             if (!_zip) throw Utils.Errors.NO_ZIP();
 
+            const dirEntries = [];
             _zip.entries.forEach(function (entry) {
                 var entryName = sanitize(targetPath, canonical(entry.entryName));
                 if (entry.isDirectory) {
                     filetools.makeDir(entryName);
+                    // defer restoring the directory permission until its files are written
+                    if (keepOriginalPermission) dirEntries.push({ path: entryName, attr: entry.header.fileAttr });
                     return;
                 }
                 var content = entry.getData(pass);
@@ -774,11 +795,15 @@ module.exports = function (/**String*/ input, /** object */ options) {
                 const fileAttr = keepOriginalPermission ? entry.header.fileAttr : undefined;
                 filetools.writeFileTo(entryName, content, overwrite, fileAttr);
                 try {
+                    // best-effort: an invalid date in the archive or a filesystem that
+                    // rejects utimes must not fail extraction of already-written content (issue #379)
                     filetools.fs.utimesSync(entryName, entry.header.time, entry.header.time);
                 } catch (err) {
-                    throw Utils.Errors.CANT_EXTRACT_FILE();
+                    /* ignore timestamp failures */
                 }
             });
+
+            applyDirAttributes(dirEntries);
         },
 
         /**
@@ -829,19 +854,40 @@ module.exports = function (/**String*/ input, /** object */ options) {
 
             // Create directory entries first synchronously
             // this prevents race condition and assures folders are there before writing files
+            const deferredDirAttr = [];
             for (const entry of dirEntries) {
                 const dirPath = getPath(entry);
                 // The reverse operation for attr depend on method addFile()
                 const dirAttr = keepOriginalPermission ? entry.header.fileAttr : undefined;
                 try {
                     filetools.makeDir(dirPath);
-                    if (dirAttr) filetools.fs.chmodSync(dirPath, dirAttr);
-                    // in unix timestamp will change if files are later added to folder, but still
-                    filetools.fs.utimesSync(dirPath, entry.header.time, entry.header.time);
                 } catch (er) {
                     callback(getError("Unable to create folder", dirPath));
+                    continue;
+                }
+                // defer restoring the directory permission until its files are written:
+                // a restrictive mode applied now would block writing them
+                if (dirAttr) deferredDirAttr.push({ path: dirPath, attr: dirAttr });
+                try {
+                    // in unix timestamp will change if files are later added to folder, but still.
+                    // best-effort: a utimes failure must not abort extraction (issue #379)
+                    filetools.fs.utimesSync(dirPath, entry.header.time, entry.header.time);
+                } catch (er) {
+                    /* ignore timestamp failures */
                 }
             }
+
+            // restore directory permissions once every file has been extracted
+            const done = (err) => {
+                if (!err) {
+                    try {
+                        applyDirAttributes(deferredDirAttr);
+                    } catch (er) {
+                        return callback(getError("Unable to set folder permissions", er.path || ""));
+                    }
+                }
+                callback(err);
+            };
 
             fileEntries.reverse().reduce(function (next, entry) {
                 return function (err) {
@@ -860,21 +906,19 @@ module.exports = function (/**String*/ input, /** object */ options) {
                                 const fileAttr = keepOriginalPermission ? entry.header.fileAttr : undefined;
                                 filetools.writeFileToAsync(filePath, content, overwrite, fileAttr, function (succ) {
                                     if (!succ) {
-                                        next(getError("Unable to write file", filePath));
+                                        return next(getError("Unable to write file", filePath));
                                     }
-                                    filetools.fs.utimes(filePath, entry.header.time, entry.header.time, function (err_2) {
-                                        if (err_2) {
-                                            next(getError("Unable to set times", filePath));
-                                        } else {
-                                            next();
-                                        }
+                                    filetools.fs.utimes(filePath, entry.header.time, entry.header.time, function () {
+                                        // best-effort: a utimes failure must not abort extraction
+                                        // of already-written content (issue #379)
+                                        next();
                                     });
                                 });
                             }
                         });
                     }
                 };
-            }, callback)();
+            }, done)();
         },
 
         /**
@@ -2253,39 +2297,51 @@ Utils.prototype.writeFileToAsync = function (/*String*/ path, /*Buffer*/ content
         if (exist && !overwrite) return callback(false);
 
         self.fs.stat(path, function (err, stat) {
-            if (exist && stat.isDirectory()) {
+            if (exist && stat && stat.isDirectory()) {
                 return callback(false);
             }
 
             var folder = pth.dirname(path);
             self.fs.exists(folder, function (exists) {
-                if (!exists) self.makeDir(folder);
+                if (!exists) {
+                    // makeDir is synchronous and can throw (e.g. EACCES); report failure
+                    // rather than letting it escape this callback as an uncaught exception
+                    try {
+                        self.makeDir(folder);
+                    } catch (e) {
+                        return callback(false);
+                    }
+                }
+
+                // write the content to an open descriptor, then apply the attributes
+                const writeToFd = function (fd) {
+                    self.fs.write(fd, content, 0, content.length, 0, function (writeErr) {
+                        self.fs.close(fd, function () {
+                            // surface write failures instead of silently reporting success (issue #402)
+                            if (writeErr) return callback(false);
+                            self.fs.chmod(path, attr || 0o666, function () {
+                                callback(true);
+                            });
+                        });
+                    });
+                };
 
                 self.fs.open(path, "w", 0o666, function (err, fd) {
                     if (err) {
+                        // the target may exist but be read-only: make it writable and retry once
                         self.fs.chmod(path, 0o666, function () {
-                            self.fs.open(path, "w", 0o666, function (err, fd) {
-                                self.fs.write(fd, content, 0, content.length, 0, function () {
-                                    self.fs.close(fd, function () {
-                                        self.fs.chmod(path, attr || 0o666, function () {
-                                            callback(true);
-                                        });
-                                    });
-                                });
+                            self.fs.open(path, "w", 0o666, function (retryErr, fd) {
+                                // Previously the retry error was ignored and an undefined fd was
+                                // passed to fs.write, throwing an uncaught ERR_INVALID_ARG_TYPE that
+                                // crashed the process (issues #470, #459, #402). Report failure instead.
+                                if (retryErr || !fd) return callback(false);
+                                writeToFd(fd);
                             });
                         });
                     } else if (fd) {
-                        self.fs.write(fd, content, 0, content.length, 0, function () {
-                            self.fs.close(fd, function () {
-                                self.fs.chmod(path, attr || 0o666, function () {
-                                    callback(true);
-                                });
-                            });
-                        });
+                        writeToFd(fd);
                     } else {
-                        self.fs.chmod(path, attr || 0o666, function () {
-                            callback(true);
-                        });
+                        callback(false);
                     }
                 });
             });
@@ -2296,7 +2352,7 @@ Utils.prototype.writeFileToAsync = function (/*String*/ path, /*Buffer*/ content
 Utils.prototype.findFiles = function (/*String*/ path) {
     const self = this;
 
-    function findSync(/*String*/ dir, /*RegExp*/ pattern, /*Boolean*/ recursive) {
+    function findSync(/*String*/ dir, /*RegExp*/ pattern, /*Boolean*/ recursive, /*Set*/ visited) {
         if (typeof pattern === "boolean") {
             recursive = pattern;
             pattern = undefined;
@@ -2310,12 +2366,22 @@ Utils.prototype.findFiles = function (/*String*/ path) {
                 files.push(pth.normalize(path) + (stat.isDirectory() ? self.sep : ""));
             }
 
-            if (stat.isDirectory() && recursive) files = files.concat(findSync(path, pattern, recursive));
+            if (stat.isDirectory() && recursive) {
+                // Descend by resolved real path and skip directories we have already
+                // visited. This stops a symlink that points back to an ancestor from
+                // recursing forever until the path fails with ELOOP / ENAMETOOLONG
+                // (issue #541).
+                const realDir = self.fs.realpathSync(path);
+                if (!visited.has(realDir)) {
+                    visited.add(realDir);
+                    files = files.concat(findSync(path, pattern, recursive, visited));
+                }
+            }
         });
         return files;
     }
 
-    return findSync(path, undefined, true);
+    return findSync(path, undefined, true, new Set([self.fs.realpathSync(path)]));
 };
 
 /**
@@ -2333,29 +2399,54 @@ Utils.prototype.findFiles = function (/*String*/ path) {
  */
 Utils.prototype.findFilesAsync = function (dir, cb) {
     const self = this;
-    let results = [];
-    self.fs.readdir(dir, function (err, list) {
-        if (err) return cb(err);
-        let list_length = list.length;
-        if (!list_length) return cb(null, results);
-        list.forEach(function (file) {
-            file = pth.join(dir, file);
-            self.fs.stat(file, function (err, stat) {
-                if (err) return cb(err);
-                if (stat) {
-                    results.push(pth.normalize(file) + (stat.isDirectory() ? self.sep : ""));
-                    if (stat.isDirectory()) {
-                        self.findFilesAsync(file, function (err, res) {
-                            if (err) return cb(err);
-                            results = results.concat(res);
-                            if (!--list_length) cb(null, results);
-                        });
-                    } else {
-                        if (!--list_length) cb(null, results);
+    const results = [];
+    let finished = false;
+    const finish = function (err) {
+        if (finished) return;
+        finished = true;
+        cb(err, err ? undefined : results);
+    };
+
+    // Descend by resolved real path and skip directories already visited, so a
+    // symlink pointing back to an ancestor cannot recurse forever (issue #541).
+    const walk = function (dir, visited, done) {
+        self.fs.readdir(dir, function (err, list) {
+            if (err) return done(err);
+            let pending = list.length;
+            if (!pending) return done();
+            list.forEach(function (name) {
+                const file = pth.join(dir, name);
+                self.fs.stat(file, function (err, stat) {
+                    if (err) return done(err);
+                    if (!stat) {
+                        if (!--pending) done();
+                        return;
                     }
-                }
+                    results.push(pth.normalize(file) + (stat.isDirectory() ? self.sep : ""));
+                    if (!stat.isDirectory()) {
+                        if (!--pending) done();
+                        return;
+                    }
+                    self.fs.realpath(file, function (err, realDir) {
+                        if (err) return done(err);
+                        if (visited.has(realDir)) {
+                            if (!--pending) done();
+                            return;
+                        }
+                        visited.add(realDir);
+                        walk(file, visited, function (err) {
+                            if (err) return done(err);
+                            if (!--pending) done();
+                        });
+                    });
+                });
             });
         });
+    };
+
+    self.fs.realpath(dir, function (err, realDir) {
+        if (err) return finish(err);
+        walk(dir, new Set([realDir]), finish);
     });
 };
 
@@ -2528,48 +2619,23 @@ module.exports = function (/** object */ options, /*Buffer*/ input) {
     }
 
     function crc32OK(data) {
-        // if bit 3 (0x08) of the general-purpose flags field is set, then the CRC-32 and file sizes are not known when the local header is written
-        if (!_centralHeader.flags_desc && !_centralHeader.localHeader.flags_desc) {
-            if (Utils.crc32(data) !== _centralHeader.localHeader.crc) {
-                return false;
-            }
-        } else {
-            const descriptor = {};
-            const dataEndOffset = _centralHeader.realDataOffset + _centralHeader.compressedSize;
-            // no descriptor after compressed data, instead new local header
-            if (input.readUInt32LE(dataEndOffset) == Constants.LOCSIG || input.readUInt32LE(dataEndOffset) == Constants.CENSIG) {
-                throw Utils.Errors.DESCRIPTOR_NOT_EXIST();
-            }
+        // When bit 3 (0x08) of the general-purpose flags is set, the crc-32 and
+        // sizes were unknown when the local file header was written, so that
+        // header carries placeholder zeros and the real values are repeated in a
+        // data descriptor after the compressed data. adm-zip always parses the
+        // central directory, whose header holds the authoritative crc-32 and
+        // sizes, so we validate the payload against that value.
+        //
+        // Earlier versions instead located and parsed the trailing descriptor and
+        // threw when it was absent or in an unexpected shape. Many valid archives
+        // set the descriptor flag but write the real crc/sizes into the local and
+        // central headers without emitting a descriptor (or write one we did not
+        // recognise), so that strict handling rejected readable zips
+        // (issues #533, #548, #554). Trusting the central-directory crc keeps the
+        // integrity check while accepting those archives.
+        const expectedCrc = _centralHeader.flags_desc || _centralHeader.localHeader.flags_desc ? _centralHeader.crc : _centralHeader.localHeader.crc;
 
-            // get decriptor data
-            if (input.readUInt32LE(dataEndOffset) == Constants.EXTSIG) {
-                // descriptor with signature
-                descriptor.crc = input.readUInt32LE(dataEndOffset + Constants.EXTCRC);
-                descriptor.compressedSize = input.readUInt32LE(dataEndOffset + Constants.EXTSIZ);
-                descriptor.size = input.readUInt32LE(dataEndOffset + Constants.EXTLEN);
-            } else if (input.readUInt16LE(dataEndOffset + 12) === 0x4b50) {
-                // descriptor without signature (we check is new header starting where we expect)
-                descriptor.crc = input.readUInt32LE(dataEndOffset + Constants.EXTCRC - 4);
-                descriptor.compressedSize = input.readUInt32LE(dataEndOffset + Constants.EXTSIZ - 4);
-                descriptor.size = input.readUInt32LE(dataEndOffset + Constants.EXTLEN - 4);
-            } else {
-                throw Utils.Errors.DESCRIPTOR_UNKNOWN();
-            }
-
-            // check data integrity
-            if (descriptor.compressedSize !== _centralHeader.compressedSize || descriptor.size !== _centralHeader.size || descriptor.crc !== _centralHeader.crc) {
-                throw Utils.Errors.DESCRIPTOR_FAULTY();
-            }
-            if (Utils.crc32(data) !== descriptor.crc) {
-                return false;
-            }
-
-            // @TODO: zip64 bit descriptor fields
-            // if bit 3 is set and any value in local header "zip64 Extended information" extra field are set 0 (place holder)
-            // then 64-bit descriptor format is used instead of 32-bit
-            // central header - "zip64 Extended information" extra field should store real values and not place holders
-        }
-        return true;
+        return Utils.crc32(data) === expectedCrc;
     }
 
     function decompress(/*Boolean*/ async, /*Function*/ callback, /*String, Buffer*/ pass) {
@@ -2599,10 +2665,16 @@ module.exports = function (/** object */ options, /*Buffer*/ input) {
             compressedData = Methods.ZipCrypto.decrypt(compressedData, _centralHeader, pass);
         }
 
-        var data = Buffer.alloc(_centralHeader.size);
+        var data;
 
         switch (_centralHeader.method) {
             case Utils.Constants.STORED:
+                // STORED entries are not compressed, so the uncompressed output is
+                // exactly the bytes present in the archive. Allocate from the real
+                // data length rather than the attacker-declared central-directory
+                // size, otherwise a tiny archive can declare a huge size and force a
+                // multi-gigabyte allocation before any validation (CVE-2026-39244).
+                data = Buffer.alloc(compressedData.length);
                 compressedData.copy(data);
                 if (!crc32OK(data)) {
                     if (async && callback) callback(data, Utils.Errors.BAD_CRC()); //si added error
@@ -2613,17 +2685,19 @@ module.exports = function (/** object */ options, /*Buffer*/ input) {
                     return data;
                 }
             case Utils.Constants.DEFLATED:
+                // Do not pre-allocate the declared uncompressed size. The inflater
+                // grows its output buffer as zlib emits data and caps the total at
+                // the declared size (maxOutputLength), so a bogus size can no longer
+                // trigger an eager allocation before the data is read (CVE-2026-39244).
                 var inflater = new Methods.Inflater(compressedData, _centralHeader.size);
                 if (!async) {
-                    const result = inflater.inflate(data);
-                    result.copy(data, 0);
+                    data = inflater.inflate();
                     if (!crc32OK(data)) {
                         throw Utils.Errors.BAD_CRC(`"${decoder.decode(_entryName)}"`);
                     }
                     return data;
                 } else {
                     inflater.inflateAsync(function (result) {
-                        result.copy(result, 0);
                         if (callback) {
                             if (!crc32OK(result)) {
                                 callback(result, Utils.Errors.BAD_CRC()); //si added error
@@ -2779,10 +2853,12 @@ module.exports = function (/** object */ options, /*Buffer*/ input) {
         },
 
         get name() {
-            var n = decoder.decode(_entryName);
+            const n = decoder.decode(_entryName);
+            // For directories the name is the last path segment; drop the trailing
+            // separator first so "a/b/c/" yields "c" and not "" (issue #466).
             return _isDirectory
                 ? n
-                      .substr(n.length - 1)
+                      .replace(/[/\\]$/, "")
                       .split("/")
                       .pop()
                 : n.split("/").pop();
@@ -2915,7 +2991,10 @@ const Utils = __nccwpck_require__(5391);
 
 module.exports = function (/*Buffer|null*/ inBuffer, /** object */ options) {
     var entryList = [],
-        entryTable = {},
+        // prototype-less: entry names come from untrusted input, so keys like
+        // "__proto__" or "constructor" must be plain data, not touch the prototype
+        // chain (which otherwise crashes addFile and hides such entries)
+        entryTable = Object.create(null),
         _comment = Buffer.alloc(0),
         mainHeader = new Headers.MainHeader(),
         loadedEntries = false;
@@ -2965,7 +3044,7 @@ module.exports = function (/*Buffer|null*/ inBuffer, /** object */ options) {
 
     function readEntries() {
         loadedEntries = true;
-        entryTable = {};
+        entryTable = Object.create(null);
         if (mainHeader.diskEntries > (inBuffer.length - mainHeader.offset) / Utils.Constants.CENHDR) {
             throw Utils.Errors.DISK_ENTRY_TOO_LARGE();
         }
@@ -3042,7 +3121,14 @@ module.exports = function (/*Buffer|null*/ inBuffer, /** object */ options) {
 
     function sortEntries() {
         if (entryList.length > 1 && !noSort) {
-            entryList.sort((a, b) => a.entryName.toLowerCase().localeCompare(b.entryName.toLowerCase()));
+            // Decode + lowercase each name once rather than on every comparison:
+            // the entryName getter re-decodes the underlying buffer on each access,
+            // so the previous inline comparator did O(n log n) redundant decoding.
+            // Ordering is unchanged (same localeCompare on the same keys).
+            entryList = entryList
+                .map((entry) => ({ entry, key: entry.entryName.toLowerCase() }))
+                .sort((a, b) => a.key.localeCompare(b.key))
+                .map((pair) => pair.entry);
         }
     }
 
