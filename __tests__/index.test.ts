@@ -99,6 +99,49 @@ describe('action', () => {
     )
   })
 
+  it('prefers the highest semantic version over newer publication dates', async () => {
+    ;(global.fetch as jest.Mock).mockImplementationOnce(async () => ({
+      ok: true,
+      json: async () => [
+        {
+          tag_name: 'v1.29.1',
+          prerelease: false,
+          published_at: '2025-01-07T00:00:00Z'
+        },
+        {
+          tag_name: 'v1.34.1',
+          prerelease: false,
+          published_at: '2024-12-01T00:00:00Z'
+        },
+        {
+          tag_name: 'v1.34.0',
+          prerelease: false,
+          published_at: '2024-11-30T00:00:00Z'
+        },
+        {
+          tag_name: 'v1.33.0',
+          prerelease: false,
+          published_at: '2024-11-29T00:00:00Z'
+        }
+      ]
+    }))
+
+    getInputMock.mockImplementation((name: string): string => {
+      switch (name) {
+        case 'version':
+          return 'latest'
+        case 'includePreRelease':
+          return 'false'
+        default:
+          return ''
+      }
+    })
+
+    await index.run()
+    expect(runMock).toHaveReturned()
+    expect(setOutputMock).toHaveBeenNthCalledWith(1, 'version', 'v1.34.1')
+  })
+
   it('sets a failed status when version is missing', async () => {
     // Set the action's inputs as return values from core.getInput()
     getInputMock.mockImplementation((name: string): string => {

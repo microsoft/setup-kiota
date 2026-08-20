@@ -4,6 +4,7 @@ import * as https from 'https'
 import * as fs from 'fs'
 import * as os from 'os'
 import AdmZip from 'adm-zip'
+import { coerce, compare } from 'semver'
 
 async function ensureKiotaIsPresent(kiotaVersion: string): Promise<void> {
   const currentPlatform = getCurrentPlatform()
@@ -129,11 +130,22 @@ async function getKiotaVersion(includePreRelease = false): Promise<string> {
     const releases = (await response.json()) as Release[]
     const release = releases
       .filter(x => includePreRelease || !x.prerelease)
-      .sort(
-        (a, b) =>
-          new Date(b.published_at).getTime() -
-          new Date(a.published_at).getTime()
-      )[0]
+      .sort((a, b) => {
+        const versionA = coerce(a.tag_name)
+        const versionB = coerce(b.tag_name)
+
+        if (!versionA && !versionB) {
+          return 0
+        }
+        if (!versionA) {
+          return 1
+        }
+        if (!versionB) {
+          return -1
+        }
+
+        return compare(versionB.version, versionA.version)
+      })[0]
     if (release) {
       return release.tag_name
     }
