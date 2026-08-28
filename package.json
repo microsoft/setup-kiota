@@ -95,7 +95,7 @@
     "eslint-plugin-jsonc": "^3.4.2",
     "eslint-plugin-prettier": "^5.5.6",
     "jest": "^30.4.2",
-    "js-yaml": "^5.3.0",
+    "js-yaml": "^5.4.0",
     "make-coverage-badge": "^1.2.0",
     "prettier": "^3.9.6",
     "prettier-eslint": "^17.1.2",
