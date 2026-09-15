@@ -84,7 +84,7 @@
     "@eslint/compat": "^2.1.1",
     "@types/adm-zip": "^0.5.8",
     "@types/jest": "^30.0.0",
-    "@types/node": "^24.13.3",
+    "@types/node": "^24.13.4",
     "@types/semver": "^7.8.0",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
